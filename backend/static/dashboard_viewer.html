@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Viewer - AI Data Analytics</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .nav-btn {
+            display: inline-block;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .dashboard-info {
+            color: #666;
+            font-size: 0.95em;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: white;
+            font-size: 1.2em;
+        }
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .warning {
+            background: #ff9800;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+        .charts-grid.layout-2x2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .charts-grid.layout-3x1 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        .charts-grid.layout-1x3 {
+            grid-template-columns: 1fr;
+        }
+        .chart-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .chart-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        .chart-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .chart-container {
+            min-height: 400px;
+            position: relative;
+        }
+        .back-btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+        .back-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .debug-info {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #333;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-buttons">
+            <a href="chart_viewer.html" class="nav-btn">📊 Charts</a>
+            <a href="insights_viewer.html" class="nav-btn">🤖 AI Insights</a>
+            <a href="dashboard_builder.html" class="nav-btn">📈 Dashboards</a>
+        </div>
+
+        <div class="header">
+            <h1 id="dashboardTitle">Loading Dashboard...</h1>
+            <div class="dashboard-info" id="dashboardInfo">Please wait...</div>
+            <a href="dashboard_builder.html" class="back-btn">← Back to Builder</a>
+        </div>
+
+        <div id="loading" class="loading">Loading dashboard</div>
+        <div id="errorContainer"></div>
+
+        <div id="chartsGrid" class="charts-grid"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        // Get dashboard ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const dashboardId = urlParams.get('id');
+        
+        console.log('Dashboard ID from URL:', dashboardId);
+        
+        if (!dashboardId) {
+            showError('No dashboard ID provided in URL. Please select a dashboard from the builder.');
+        } else {
+            loadDashboard(dashboardId);
+        }
+        
+        // Show error message
+        function showError(message, details = null) {
+            const loading = document.getElementById('loading');
+            const errorContainer = document.getElementById('errorContainer');
+            
+            loading.style.display = 'none';
+            
+            let errorHTML = `<div class="error">
+                <strong>Error:</strong> ${message}
+            </div>`;
+            
+            if (details) {
+                errorHTML += `<div class="debug-info">
+                    <strong>Technical Details:</strong><br>
+                    ${JSON.stringify(details, null, 2)}
+                </div>`;
+            }
+            
+            errorContainer.innerHTML = errorHTML;
+        }
+        
+        // Show warning message
+        function showWarning(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML += `<div class="warning">${message}</div>`;
+        }
+        
+        // Load dashboard
+        async function loadDashboard(id) {
+            try {
+                console.log('Fetching dashboard from:', `${API_BASE}/dashboards/${id}`);
+                
+                const response = await fetch(`${API_BASE}/dashboards/${id}`);
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Dashboard not found (Status ${response.status}): ${errorText}`);
+                }
+                
+                const dashboard = await response.json();
+                console.log('Dashboard loaded:', dashboard);
+                
+                // Validate dashboard data
+                if (!dashboard.charts) {
+                    throw new Error('Dashboard has no charts array');
+                }
+                
+                displayDashboard(dashboard);
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError(
+                    `Failed to load dashboard: ${error.message}`,
+                    {
+                        dashboardId: id,
+                        apiUrl: `${API_BASE}/dashboards/${id}`,
+                        error: error.toString()
+                    }
+                );
+            }
+        }
+        
+        // Display dashboard
+        function displayDashboard(dashboard) {
+            console.log('Displaying dashboard:', dashboard.name);
+            
+            // Update header
+            document.getElementById('dashboardTitle').textContent = dashboard.name || 'Untitled Dashboard';
+            document.getElementById('dashboardInfo').innerHTML = `
+                ${dashboard.description || 'No description'} • 
+                <strong>${dashboard.charts ? dashboard.charts.length : 0}</strong> charts • 
+                ${dashboard.layout || 'auto'} layout
+            `;
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+            
+            // Display charts
+            const grid = document.getElementById('chartsGrid');
+            grid.innerHTML = ''; // Clear existing content
+            
+            // Apply layout class
+            grid.className = 'charts-grid';
+            if (dashboard.layout === '2x2') {
+                grid.classList.add('layout-2x2');
+            } else if (dashboard.layout === '3x1') {
+                grid.classList.add('layout-3x1');
+            } else if (dashboard.layout === '1x3') {
+                grid.classList.add('layout-1x3');
+            }
+            
+            if (!dashboard.charts || dashboard.charts.length === 0) {
+                showWarning('This dashboard has no charts. Please add charts from the builder.');
+                return;
+            }
+            
+            console.log(`Rendering ${dashboard.charts.length} charts`);
+            
+            dashboard.charts.forEach((chart, index) => {
+                renderChart(chart, index, grid);
+            });
+        }
+        
+        // Render individual chart
+        function renderChart(chart, index, grid) {
+            console.log(`Rendering chart ${index}:`, chart);
+            
+            const card = document.createElement('div');
+            card.className = 'chart-card';
+            
+            const title = document.createElement('div');
+            title.className = 'chart-title';
+            title.textContent = getChartTitle(chart);
+            
+            const container = document.createElement('div');
+            container.className = 'chart-container';
+            const containerId = `chart-${index}`;
+            container.id = containerId;
+            
+            card.appendChild(title);
+            card.appendChild(container);
+            grid.appendChild(card);
+            
+            // Wait for DOM to be ready
+            setTimeout(() => {
+                try {
+                    // Validate chart data
+                    if (!chart.data) {
+                        throw new Error('Chart has no data field');
+                    }
+                    
+                    // Parse chart data
+                    let plotlyData;
+                    if (typeof chart.data === 'string') {
+                        plotlyData = JSON.parse(chart.data);
+                    } else {
+                        plotlyData = chart.data;
+                    }
+                    
+                    console.log(`Chart ${index} parsed data:`, plotlyData);
+                    
+                    // Validate plotly data structure
+                    if (!plotlyData.data || !Array.isArray(plotlyData.data)) {
+                        throw new Error('Invalid Plotly data structure: missing data array');
+                    }
+                    
+                    // Set default layout if missing
+                    const layout = plotlyData.layout || {
+                        autosize: true,
+                        margin: { t: 40, r: 20, b: 40, l: 60 }
+                    };
+                    
+                    // Ensure responsive sizing
+                    layout.autosize = true;
+                    
+                    // Render the chart
+                    Plotly.newPlot(
+                        containerId, 
+                        plotlyData.data, 
+                        layout,
+                        {
+                            responsive: true,
+                            displayModeBar: true,
+                            displaylogo: false
+                        }
+                    );
+                    
+                    console.log(`Chart ${index} rendered successfully`);
+                    
+                } catch (error) {
+                    console.error(`Error rendering chart ${index}:`, error);
+                    container.innerHTML = `
+                        <div style="color: #ff4444; padding: 20px; text-align: center;">
+                            <strong>Error rendering chart</strong><br>
+                            <small>${error.message}</small>
+                            <div class="debug-info" style="margin-top: 10px;">
+                                Chart type: ${chart.type || 'unknown'}<br>
+                                Has data: ${!!chart.data}<br>
+                                Data type: ${typeof chart.data}
+                            </div>
+                        </div>
+                    `;
+                }
+            }, index * 100); // Stagger rendering
+        }
+        
+        // Get chart title based on type and config
+        function getChartTitle(chart) {
+            const typeNames = {
+                'bar': 'Bar Chart',
+                'horizontal_bar': 'Horizontal Bar Chart',
+                'pie': 'Pie Chart',
+                'line': 'Line Chart',
+                'area': 'Area Chart',
+                'box': 'Box Plot',
+                'violin': 'Violin Plot',
+                'grouped_bar': 'Grouped Bar Chart',
+                'stacked_bar': 'Stacked Bar Chart'
+            };
+            
+            let title = typeNames[chart.type] || chart.type || 'Chart';
+            
+            // Add column info if available
+            if (chart.config) {
+                if (chart.config.column) {
+                    title += ` - ${chart.config.column}`;
+                } else if (chart.config.x_column && chart.config.y_column) {
+                    title += ` - ${chart.config.x_column} vs ${chart.config.y_column}`;
+                } else if (chart.config.category_column) {
+                    title += ` - ${chart.config.category_column}`;
+                }
+            }
+            
+            return title;
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const charts = document.querySelectorAll('.chart-container');
+            charts.forEach(chart => {
+                if (chart.id) {
+                    Plotly.Plots.resize(chart.id);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

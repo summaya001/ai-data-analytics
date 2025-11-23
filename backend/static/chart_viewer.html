@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Viewer - AI Data Analytics</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .chart-title {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: bold;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+        }
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            margin: 20px;
+        }
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .column-inputs {
+            display: none;
+        }
+        .column-inputs.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Chart Viewer</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="datasetId">Dataset ID:</label>
+                <input type="number" id="datasetId" value="1" min="1">
+            </div>
+            
+            <div class="control-group">
+                <button onclick="loadAutoCharts()">Generate All Charts Automatically</button>
+            </div>
+            
+            <hr style="margin: 20px 0;">
+            
+            <h3 style="margin-bottom: 10px;">Or Create Custom Chart:</h3>
+            
+            <div class="control-group">
+                <label for="chartType">Chart Type:</label>
+                <select id="chartType" onchange="updateColumnInputs()">
+                    <option value="bar">Bar Chart</option>
+                    <option value="pie">Pie Chart</option>
+                    <option value="box">Box Plot</option>
+                    <option value="violin">Violin Plot</option>        
+                    <option value="area">Area Chart</option>
+                    <option value="stacked_bar">Stacked Bar Chart</option>
+                    <option value="grouped_bar">Grouped Bar Chart</option>
+                </select>
+            </div>
+            
+            <!-- Single column input -->
+            <div class="control-group column-inputs" id="singleColumnInput">
+                <label for="column1">Column Name:</label>
+                <input type="text" id="column1" placeholder="e.g., Age, City, Salary">
+            </div>
+            
+            <!-- Two column input (for area chart) -->
+            <div class="control-group column-inputs" id="twoColumnInput">
+                <label for="xColumn">X-axis Column:</label>
+                <input type="text" id="xColumn" placeholder="e.g., Date, Age">
+                <label for="yColumn" style="margin-top: 10px;">Y-axis Column:</label>
+                <input type="text" id="yColumn" placeholder="e.g., Sales, Revenue">
+            </div>
+            
+            <!-- Three column input (for stacked/grouped bar) -->
+            <div class="control-group column-inputs" id="threeColumnInput">
+                <label for="xColumnThree">X-axis / Category Column:</label>
+                <input type="text" id="xColumnThree" placeholder="e.g., Product, Region">
+                <label for="yColumnThree" style="margin-top: 10px;">Y-axis / Value Column:</label>
+                <input type="text" id="yColumnThree" placeholder="e.g., Sales, Revenue">
+                <label for="groupColumn" style="margin-top: 10px;">Group/Stack Column:</label>
+                <input type="text" id="groupColumn" placeholder="e.g., Category, Type">
+            </div>
+            
+            <!-- Violin with grouping -->
+            <div class="control-group column-inputs" id="violinInput">
+                <label for="violinColumn">Column to Plot:</label>
+                <input type="text" id="violinColumn" placeholder="e.g., Salary, Age">
+                <label for="violinGroupBy" style="margin-top: 10px;">Group By (optional):</label>
+                <input type="text" id="violinGroupBy" placeholder="e.g., City, Category">
+            </div>
+            
+            <div class="control-group">
+                <button onclick="createCustomChart()">Create Custom Chart</button>
+            </div>
+        </div>
+        
+        <div id="message"></div>
+        <div id="chartGrid" class="chart-grid"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        function updateColumnInputs() {
+            const chartType = document.getElementById('chartType').value;
+            
+            // Hide all input groups
+            document.querySelectorAll('.column-inputs').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            // Show appropriate inputs based on chart type
+            if (chartType === 'bar' || chartType === 'pie' || chartType === 'box') {
+                document.getElementById('singleColumnInput').classList.add('active');
+            } else if (chartType === 'area') {
+                document.getElementById('twoColumnInput').classList.add('active');
+            } else if (chartType === 'stacked_bar' || chartType === 'grouped_bar') {
+                document.getElementById('threeColumnInput').classList.add('active');
+            } else if (chartType === 'violin') {
+                document.getElementById('violinInput').classList.add('active');
+            }
+            // heatmap needs no inputs
+        }
+        
+        // Initialize on page load
+        updateColumnInputs();
+        
+        function showMessage(message, type = 'success') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            setTimeout(() => messageDiv.innerHTML = '', 5000);
+        }
+        
+        function showLoading() {
+            document.getElementById('chartGrid').innerHTML = '<div class="loading">Loading charts...</div>';
+        }
+        
+        async function loadAutoCharts() {
+            const datasetId = document.getElementById('datasetId').value;
+            showLoading();
+            
+            try {
+                const response = await fetch(`${API_BASE}/datasets/${datasetId}/charts/auto`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to load charts');
+                }
+                
+                displayCharts(data.charts);
+                showMessage(`Successfully generated ${data.total_charts} charts!`);
+            } catch (error) {
+                document.getElementById('chartGrid').innerHTML = '';
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function createCustomChart() {
+            const datasetId = document.getElementById('datasetId').value;
+            const chartType = document.getElementById('chartType').value;
+            
+            showLoading();
+            
+            try {
+                let url = `${API_BASE}/datasets/${datasetId}/charts/${chartType}`;
+                let params = new URLSearchParams();
+                
+                // Build params based on chart type
+                if (chartType === 'bar' || chartType === 'pie' || chartType === 'box') {
+                    const column = document.getElementById('column1').value;
+                    if (!column) {
+                        showMessage('Please enter a column name', 'error');
+                        document.getElementById('chartGrid').innerHTML = '';
+                        return;
+                    }
+                    params.append('column', column);
+                    
+                } else if (chartType === 'area') {
+                    const xCol = document.getElementById('xColumn').value;
+                    const yCol = document.getElementById('yColumn').value;
+                    if (!xCol || !yCol) {
+                        showMessage('Please enter both X and Y columns', 'error');
+                        document.getElementById('chartGrid').innerHTML = '';
+                        return;
+                    }
+                    params.append('x_column', xCol);
+                    params.append('y_column', yCol);
+                    
+                } else if (chartType === 'stacked_bar') {
+                    const xCol = document.getElementById('xColumnThree').value;
+                    const yCol = document.getElementById('yColumnThree').value;
+                    const stackCol = document.getElementById('groupColumn').value;
+                    if (!xCol || !yCol || !stackCol) {
+                        showMessage('Please enter all three columns', 'error');
+                        document.getElementById('chartGrid').innerHTML = '';
+                        return;
+                    }
+                    params.append('x_column', xCol);
+                    params.append('y_column', yCol);
+                    params.append('stack_column', stackCol);
+                    
+                } else if (chartType === 'grouped_bar') {
+                    const catCol = document.getElementById('xColumnThree').value;
+                    const valCol = document.getElementById('yColumnThree').value;
+                    const groupCol = document.getElementById('groupColumn').value;
+                    if (!catCol || !valCol || !groupCol) {
+                        showMessage('Please enter all three columns', 'error');
+                        document.getElementById('chartGrid').innerHTML = '';
+                        return;
+                    }
+                    params.append('category_column', catCol);
+                    params.append('value_column', valCol);
+                    params.append('group_column', groupCol);
+                    
+                } else if (chartType === 'violin') {
+                    const col = document.getElementById('violinColumn').value;
+                    const groupBy = document.getElementById('violinGroupBy').value;
+                    if (!col) {
+                        showMessage('Please enter a column name', 'error');
+                        document.getElementById('chartGrid').innerHTML = '';
+                        return;
+                    }
+                    params.append('column', col);
+                    if (groupBy) {
+                        params.append('group_by', groupBy);
+                    }
+                }
+                // heatmap needs no params
+                
+                const response = await fetch(`${url}?${params.toString()}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to create chart');
+                }
+                
+                displayCharts([data.chart]);
+                showMessage('Chart created successfully!');
+            } catch (error) {
+                document.getElementById('chartGrid').innerHTML = '';
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        function displayCharts(charts) {
+            const grid = document.getElementById('chartGrid');
+            grid.innerHTML = '';
+            
+            if (!charts || charts.length === 0) {
+                grid.innerHTML = '<div class="loading">No charts to display</div>';
+                return;
+            }
+            
+            charts.forEach((chart, index) => {
+                const card = document.createElement('div');
+                card.className = 'chart-card';
+                
+                const title = document.createElement('div');
+                title.className = 'chart-title';
+                title.textContent = getChartTitle(chart);
+                
+                const container = document.createElement('div');
+                container.className = 'chart-container';
+                container.id = `chart-${index}`;
+                
+                card.appendChild(title);
+                card.appendChild(container);
+                grid.appendChild(card);
+                
+                // Parse and render Plotly chart
+                try {
+                    const plotlyData = JSON.parse(chart.data);
+                    Plotly.newPlot(container.id, plotlyData.data, plotlyData.layout, {responsive: true});
+                } catch (e) {
+                    container.innerHTML = '<div style="color: red; padding: 20px;">Error rendering chart</div>';
+                    console.error('Chart rendering error:', e);
+                }
+            });
+        }
+        
+        function getChartTitle(chart) {
+            const type = chart.type.charAt(0).toUpperCase() + chart.type.slice(1).replace('_', ' ');
+            
+            if (chart.column) {
+                return `${type}: ${chart.column}`;
+            } else if (chart.columns && Array.isArray(chart.columns)) {
+                return `${type}: ${chart.columns.join(' × ')}`;
+            }
+            return type;
+        }
+        
+        // Load charts on page load if dataset ID is provided
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const datasetId = urlParams.get('dataset');
+            if (datasetId) {
+                document.getElementById('datasetId').value = datasetId;
+                loadAutoCharts();
+            }
+        });
+    </script>
+</body>
+</html>
